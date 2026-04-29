@@ -71,7 +71,7 @@ class GaussianMapper:
         # roughly one pixel-stride in world space
         avg_depth = np.median(d)
         pixel_size = avg_depth * stride / ((fx + fy) / 2)
-        init_scale = float(np.clip(pixel_size * 5, 0.03, 0.3))
+        init_scale = float(np.clip(pixel_size * 3, 0.02, 0.15))
 
         if self.params is None:
             self.params = {
@@ -110,10 +110,14 @@ class GaussianMapper:
         self.state = self.strategy.initialize_state(scene_scale=1.0)
 
     def _rebuild_optimizers(self):
-        self.optimizers = {}
-        for k, p in self.params.items():
-            lr = self.lr_config.get(k, 0.001)
-            self.optimizers[k] = torch.optim.Adam([p], lr=lr)
+        param_groups = [
+            {"params": [self.params["means"]], "lr": self.lr_config["means"]},
+            {"params": [self.params["colors"]], "lr": self.lr_config["colors"]},
+            {"params": [self.params["scales"]], "lr": self.lr_config["scales"]},
+            {"params": [self.params["opacities"]], "lr": self.lr_config["opacities"]},
+            {"params": [self.params["quats"]], "lr": self.lr_config["quats"]},
+        ]
+        self.optimizer = torch.optim.Adam(param_groups)
 
     @property
     def n_gaussians(self):
@@ -123,15 +127,13 @@ class GaussianMapper:
 
     def train_step(self, rgb_target: torch.Tensor, viewmat: torch.Tensor,
                    K: torch.Tensor, W: int, H: int) -> float:
-        """One training step: render, compute loss, backprop, densify."""
-        # Clamp scales to prevent numerical issues
+        """One training step: render, compute loss, backprop."""
         with torch.no_grad():
-            self.params["scales"].data.clamp_(0.001, 1.0)
+            self.params["scales"].data.clamp_(0.001, 2.0)
             self.params["quats"].data = torch.nn.functional.normalize(
                 self.params["quats"].data, dim=-1)
 
-        for opt in self.optimizers.values():
-            opt.zero_grad()
+        self.optimizer.zero_grad()
 
         rendered, alpha, info = rasterization(
             means=self.params["means"],
@@ -145,20 +147,9 @@ class GaussianMapper:
             packed=False,
         )
 
-        l1 = torch.nn.functional.l1_loss(rendered[0], rgb_target)
-        ssim_val = 1.0 - self._ssim(rendered[0], rgb_target)
-        loss = 0.8 * l1 + 0.2 * ssim_val
-
-        self.strategy.step_pre_backward(
-            self.params, self.optimizers, self.state, self.global_step, info)
-
+        loss = torch.nn.functional.l1_loss(rendered[0], rgb_target)
         loss.backward()
-
-        self.strategy.step_post_backward(
-            self.params, self.optimizers, self.state, self.global_step, info, packed=False)
-
-        for opt in self.optimizers.values():
-            opt.step()
+        self.optimizer.step()
 
         self.global_step += 1
         return loss.item()
