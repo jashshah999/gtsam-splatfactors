@@ -65,13 +65,17 @@ def render_gaussians(
     fx, fy = K[0, 0], K[1, 1]
     cx, cy = K[0, 2], K[1, 2]
 
+    # gsplat uses Y-down convention; flip Y so scenes with Y-up render correctly
+    vm = viewmat.clone()
+    vm[1] = -vm[1]
+
     rendered, alpha, meta = rasterization(
         means=means,
         quats=quats,
         scales=scales,
         opacities=opacities.sigmoid(),
         colors=colors,
-        viewmats=viewmat[None],  # (1, 4, 4)
+        viewmats=vm[None],  # (1, 4, 4)
         Ks=torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]],
                         device=means.device, dtype=means.dtype)[None],
         width=W,
