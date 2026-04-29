@@ -25,7 +25,7 @@ Synthetic room scene (22k Gaussians) — camera tracks a circular trajectory wit
 
 ![Trajectory](assets/trajectory.png)
 
-ATE: **0.075m** (noisy init) → **0.033m** (after photometric tracking) → **0.038m** (after iSAM2 + loop closure). 20/24 frames improved.
+ATE: **0.060m** (noisy init) → **0.006m** (after photometric tracking) → **0.007m** (after iSAM2 + loop closure). 23/24 frames improved.
 
 > This is a synthetic proof-of-concept. Real-dataset evaluation (TUM-RGBD, Replica) is the next milestone — see roadmap below.
 
