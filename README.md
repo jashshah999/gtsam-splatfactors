@@ -27,7 +27,17 @@ Synthetic room scene (22k Gaussians) — camera tracks a circular trajectory wit
 
 ATE: **0.060m** (noisy init) → **0.006m** (after photometric tracking) → **0.007m** (after iSAM2 + loop closure). 23/24 frames improved.
 
-> This is a synthetic proof-of-concept. Real-dataset evaluation (TUM-RGBD, Replica) is the next milestone — see roadmap below.
+> Synthetic scene shows the factor graph pipeline working end-to-end. See TUM-RGBD results below for real-data evaluation.
+
+**TUM-RGBD fr1/desk** — trained 148k Gaussians on 10 keyframes, tracked remaining 40 frames:
+
+![TUM Results](assets/tum_fr1_desk.png)
+
+First tracked frame: **6.1cm** error. Drift increases as camera moves beyond initial map coverage. Trained Gaussian render vs GT:
+
+<img src="assets/tum_trained_render.png" width="320"> <img src="assets/tum_gt_frame0.png" width="320">
+
+The tracking works where the map has coverage. Reducing drift requires denser incremental mapping — see roadmap.
 
 Run the demo yourself: `python examples/make_demo_video.py` (requires CUDA GPU).
 
@@ -115,12 +125,13 @@ This is early-stage research code. Phase 1 (core factor + SLAM pipeline) is impl
 - [x] `GaussianMap` with point cloud initialization
 - [x] `SplatSLAM` incremental pipeline with iSAM2
 - [x] Loop closure support
-- [ ] Tune photometric factor noise model and pixel sampling for better tracking
-- [ ] Analytical Jacobians through gsplat autograd (replace numerical ~13x faster)
+- [x] TUM-RGBD dataset loader and evaluation script
+- [x] Gaussian map training with L1 loss (converges to 0.04 on synthetic, 0.11 on TUM)
+- [ ] Dense incremental mapping (more iters per keyframe, add Gaussians from tracked frames)
+- [ ] Densification (gsplat DefaultStrategy — currently causes FPE, needs debugging)
+- [ ] Analytical Jacobians through gsplat autograd (replace numerical, ~10x faster)
 - [ ] Keyframe selection heuristics (overlap-based)
-- [ ] Dense depth initialization from monocular depth (ZoeDepth/DPT)
-- [ ] Benchmarks on TUM-RGBD / Replica
-- [ ] TUM-RGBD dataset loader and evaluation script
+- [ ] Monocular depth initialization (ZoeDepth/DPT)
 
 ## How it compares
 
