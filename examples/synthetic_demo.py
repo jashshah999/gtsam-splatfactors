@@ -148,10 +148,13 @@ def main():
     params = gtsam.ISAM2Params()
     slam = SplatSLAM(
         K=K_np, W=W, H=H,
-        n_pixel_samples=256,
+        n_pixel_samples=512,
         device=device,
         isam2_params=params,
-        mapping_iters=0,  # skip mapping for now, use GT Gaussians
+        mapping_iters=0,  # skip mapping, use GT Gaussians
+        photo_sigma=0.5,  # per-pixel photometric noise
+        odom_sigma=0.15,  # odometry noise (we add ~0.1m perturbation)
+        tracking_iters=5, # iterate iSAM2 for convergence
     )
     # Inject the ground-truth Gaussians so tracking uses them
     slam.gaussian_map = gt_map

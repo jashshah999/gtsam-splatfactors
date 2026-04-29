@@ -38,6 +38,9 @@ class SplatSLAM:
         isam2_params: "gtsam.ISAM2Params | None" = None,
         mapping_iters: int = 30,
         mapping_lr: float = 0.01,
+        photo_sigma: float = 1.0,
+        odom_sigma: float = 0.1,
+        tracking_iters: int = 3,
     ):
         assert HAS_GTSAM, "gtsam required"
         assert HAS_TORCH, "torch required"
@@ -50,6 +53,9 @@ class SplatSLAM:
         self.device = device
         self.mapping_iters = mapping_iters
         self.mapping_lr = mapping_lr
+        self.photo_sigma = photo_sigma
+        self.odom_sigma = odom_sigma
+        self.tracking_iters = tracking_iters
 
         if isam2_params is None:
             isam2_params = gtsam.ISAM2Params()
@@ -102,7 +108,7 @@ class SplatSLAM:
         if idx > 0:
             prev_key = self._pose_key(idx - 1)
             odom = self.poses[idx - 1].between(pose_init)
-            odom_noise = gtsam.noiseModel.Isotropic.Sigma(6, 0.1)
+            odom_noise = gtsam.noiseModel.Isotropic.Sigma(6, self.odom_sigma)
             graph.add(gtsam.BetweenFactorPose3(prev_key, key, odom, odom_noise))
 
         # Photometric rendering factor (only if we have Gaussians to render)
@@ -118,13 +124,15 @@ class SplatSLAM:
                 device=self.device,
             )
             photo_noise = gtsam.noiseModel.Isotropic.Sigma(
-                splat_factor.n_residuals, 0.1
+                splat_factor.n_residuals, self.photo_sigma
             )
             graph.add(splat_factor.as_gtsam_factor(key, photo_noise))
 
-        # Add to iSAM2
+        # Add to iSAM2 and iterate for convergence
         initial.insert(key, pose_init)
-        result = self.isam2.update(graph, initial)
+        self.isam2.update(graph, initial)
+        for _ in range(self.tracking_iters - 1):
+            self.isam2.update()
         estimate = self.isam2.calculateEstimate()
         optimized_pose = estimate.atPose3(key)
         self.poses[idx] = optimized_pose
