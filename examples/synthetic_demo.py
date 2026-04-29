@@ -196,6 +196,32 @@ def main():
 
     ate = total_err / n_frames
     print(f"\nAverage Translation Error (ATE): {ate:.4f} m")
+
+    # Save trajectory plot
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        gt_xy = np.array([p[:3, 3] for p in gt_poses])
+        est_xy = np.array([corrected[i][:3, 3] for i in range(n_frames)])
+        ax.plot(gt_xy[:, 0], gt_xy[:, 2], "g-o", label="Ground Truth", markersize=5)
+        ax.plot(est_xy[:, 0], est_xy[:, 2], "r-x", label="Estimated", markersize=5)
+        for i in range(n_frames):
+            ax.plot([gt_xy[i, 0], est_xy[i, 0]], [gt_xy[i, 2], est_xy[i, 2]],
+                    "k--", alpha=0.3, linewidth=0.5)
+        ax.set_xlabel("X (m)")
+        ax.set_ylabel("Z (m)")
+        ax.set_title(f"SplatSLAM Trajectory (ATE: {ate:.3f} m)")
+        ax.legend()
+        ax.set_aspect("equal")
+        ax.grid(True, alpha=0.3)
+        plt.savefig("output/trajectory.png", dpi=150, bbox_inches="tight")
+        print("\nSaved trajectory plot to output/trajectory.png")
+    except ImportError:
+        print("\nmatplotlib not installed, skipping trajectory plot")
+
     print("\nDone!")
 
 

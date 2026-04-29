@@ -95,44 +95,28 @@ class SplatSLAM:
             init_pose = np.eye(4)
         pose_init = matrix_to_pose3(init_pose)
 
+        # --- Phase 1: Track pose via LM with photometric factor ---
+        tracked_pose = pose_init
+        if self.gaussian_map.n_gaussians > 0:
+            tracked_pose = self._track_pose(image, pose_init, key)
+
+        # --- Phase 2: Insert into iSAM2 for global consistency ---
         graph = gtsam.NonlinearFactorGraph()
         initial = gtsam.Values()
 
-        # First keyframe: add a strong prior
         if idx == 0 or prior_sigma is not None:
             sigma = prior_sigma if prior_sigma is not None else 0.01
             prior_noise = gtsam.noiseModel.Isotropic.Sigma(6, sigma)
-            graph.addPriorPose3(key, pose_init, prior_noise)
+            graph.addPriorPose3(key, tracked_pose, prior_noise)
 
-        # Odometry factor from previous keyframe (constant velocity model)
         if idx > 0:
             prev_key = self._pose_key(idx - 1)
-            odom = self.poses[idx - 1].between(pose_init)
+            odom = self.poses[idx - 1].between(tracked_pose)
             odom_noise = gtsam.noiseModel.Isotropic.Sigma(6, self.odom_sigma)
             graph.add(gtsam.BetweenFactorPose3(prev_key, key, odom, odom_noise))
 
-        # Photometric rendering factor (only if we have Gaussians to render)
-        if self.gaussian_map.n_gaussians > 0:
-            pixel_idx = sample_pixel_indices(self.H, self.W, self.n_pixel_samples, self.rng)
-            splat_factor = GaussianSplatFactor(
-                gaussian_map=self.gaussian_map,
-                target_image=image,
-                K=self.K_torch,
-                pixel_indices=pixel_idx,
-                W=self.W,
-                H=self.H,
-                device=self.device,
-            )
-            photo_noise = gtsam.noiseModel.Isotropic.Sigma(
-                splat_factor.n_residuals, self.photo_sigma
-            )
-            graph.add(splat_factor.as_gtsam_factor(key, photo_noise))
-
-        # Add to iSAM2 and iterate for convergence
-        initial.insert(key, pose_init)
+        initial.insert(key, tracked_pose)
         self.isam2.update(graph, initial)
-        for _ in range(self.tracking_iters - 1):
-            self.isam2.update()
         estimate = self.isam2.calculateEstimate()
         optimized_pose = estimate.atPose3(key)
         self.poses[idx] = optimized_pose
@@ -146,6 +130,40 @@ class SplatSLAM:
             self._mapping_step(image, optimized_pose)
 
         return pose3_to_matrix(optimized_pose)
+
+    def _track_pose(self, image, pose_init, key):
+        """Optimize a single pose against the Gaussian map using LM."""
+        track_graph = gtsam.NonlinearFactorGraph()
+        track_init = gtsam.Values()
+
+        # Prior on initial guess (loose, just for regularization)
+        prior_noise = gtsam.noiseModel.Isotropic.Sigma(6, 1.0)
+        track_graph.addPriorPose3(key, pose_init, prior_noise)
+
+        # Photometric factor
+        pixel_idx = sample_pixel_indices(self.H, self.W, self.n_pixel_samples, self.rng)
+        splat_factor = GaussianSplatFactor(
+            gaussian_map=self.gaussian_map,
+            target_image=image,
+            K=self.K_torch,
+            pixel_indices=pixel_idx,
+            W=self.W,
+            H=self.H,
+            device=self.device,
+        )
+        photo_noise = gtsam.noiseModel.Isotropic.Sigma(
+            splat_factor.n_residuals, self.photo_sigma
+        )
+        track_graph.add(splat_factor.as_gtsam_factor(key, photo_noise))
+
+        track_init.insert(key, pose_init)
+
+        lm_params = gtsam.LevenbergMarquardtParams()
+        lm_params.setMaxIterations(self.tracking_iters)
+        lm_params.setVerbosityLM("SILENT")
+        optimizer = gtsam.LevenbergMarquardtOptimizer(track_graph, track_init, lm_params)
+        result = optimizer.optimize()
+        return result.atPose3(key)
 
     def _init_gaussians_from_depth(self, image, depth, pose):
         """Back-project depth pixels to 3D and add as new Gaussians."""
