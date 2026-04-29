@@ -31,19 +31,18 @@ requires_cuda_gsplat = pytest.mark.skipif(
 
 
 def _make_visible_scene(device="cuda"):
-    """Create a Gaussian scene that renders visible content from z=5."""
+    """Create a Gaussian scene that renders visible content.
+    Gaussians at z~5, camera at origin looking down +Z (gsplat convention)."""
     from gsplat_slam.map import GaussianMap
     n = 500
-    # Place Gaussians in a 2m x 2m plane at z=0, visible from z=5
     means = np.zeros((n, 3), dtype=np.float32)
-    means[:, 0] = np.random.uniform(-1, 1, n)
-    means[:, 1] = np.random.uniform(-1, 1, n)
-    means[:, 2] = np.random.uniform(-0.5, 0.5, n)
+    means[:, 0] = np.random.uniform(-2, 2, n)
+    means[:, 1] = np.random.uniform(-2, 2, n)
+    means[:, 2] = np.random.uniform(4, 6, n)  # in front of camera at origin
     colors = np.random.rand(n, 3).astype(np.float32)
     gmap = GaussianMap.from_pointcloud(means, colors, device=device)
-    # Use larger scales so they're visible
-    gmap.scales.data.fill_(-1.5)  # exp(-1.5) ~ 0.22, visible blobs
-    gmap.opacities.data.fill_(5.0)  # sigmoid(5) ~ 0.99, fully opaque
+    gmap.scales.data.fill_(0.0)  # exp(0) = 1.0, visible blobs
+    gmap.opacities.data.fill_(0.99)  # raw opacity, NOT logit
     return gmap
 
 
@@ -59,10 +58,9 @@ def test_splat_factor_residual_at_correct_pose():
     K = torch.tensor([[50, 0, 32], [0, 50, 32], [0, 0, 1]], dtype=torch.float32, device=device)
     gmap = _make_visible_scene(device)
 
-    gt_pose = np.eye(4)
-    gt_pose[2, 3] = 5.0
+    gt_pose = np.eye(4)  # camera at origin
 
-    viewmat = torch.inverse(torch.tensor(gt_pose, dtype=torch.float32, device=device))
+    viewmat = torch.eye(4, dtype=torch.float32, device=device)  # identity
     with torch.no_grad():
         target, _, _ = render_gaussians(
             gmap.means, gmap.quats, gmap.scales, gmap.opacities, gmap.colors,
@@ -86,12 +84,11 @@ def test_splat_factor_error_increases_with_perturbation():
     device = "cuda"
     H, W = 64, 64
     K = torch.tensor([[50, 0, 32], [0, 50, 32], [0, 0, 1]], dtype=torch.float32, device=device)
-    gmap = _make_visible_scene(device)
+    gmap = _make_visible_scene(device)  # Gaussians at z=4..6
 
-    gt_pose = np.eye(4)
-    gt_pose[2, 3] = 5.0
+    gt_pose = np.eye(4)  # camera at origin, Gaussians in front
 
-    viewmat = torch.inverse(torch.tensor(gt_pose, dtype=torch.float32, device=device))
+    viewmat = torch.eye(4, dtype=torch.float32, device=device)
     with torch.no_grad():
         target, _, _ = render_gaussians(
             gmap.means, gmap.quats, gmap.scales, gmap.opacities, gmap.colors,
@@ -104,7 +101,7 @@ def test_splat_factor_error_increases_with_perturbation():
     err_gt = factor.error_at(matrix_to_pose3(gt_pose))
 
     perturbed = np.eye(4)
-    perturbed[2, 3] = 5.5  # 0.5m off
+    perturbed[0, 3] = 0.5  # 0.5m lateral shift
     err_perturbed = factor.error_at(matrix_to_pose3(perturbed))
 
     assert err_perturbed > err_gt, (
@@ -123,11 +120,10 @@ def test_splat_factor_jacobian_shape():
     H, W = 32, 32
     n_samples = 64
     K = torch.tensor([[50, 0, 16], [0, 50, 16], [0, 0, 1]], dtype=torch.float32, device=device)
-    gmap = _make_visible_scene(device)
+    gmap = _make_visible_scene(device)  # Gaussians at z=4..6
 
-    gt_pose = np.eye(4)
-    gt_pose[2, 3] = 5.0
-    viewmat = torch.inverse(torch.tensor(gt_pose, dtype=torch.float32, device=device))
+    gt_pose = np.eye(4)  # camera at origin
+    viewmat = torch.eye(4, dtype=torch.float32, device=device)
     with torch.no_grad():
         target, _, _ = render_gaussians(
             gmap.means, gmap.quats, gmap.scales, gmap.opacities, gmap.colors,
