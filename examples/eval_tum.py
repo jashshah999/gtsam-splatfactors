@@ -89,18 +89,11 @@ def main():
     mapper = GaussianMapper(device=device, refine_start=100, refine_every=50, reset_every=500)
 
     init_frames = []
+    init_stride = max(8, args.init_frames)  # larger stride for more frames
     for i in range(min(args.init_frames, len(dataset))):
         frame = dataset[i]
-        mapper.init_from_rgbd(frame["rgb"], frame["depth"], frame["pose"], K, stride=8)
+        mapper.init_from_rgbd(frame["rgb"], frame["depth"], frame["pose"], K, stride=init_stride)
         init_frames.append(frame)
-
-    # Cap total Gaussians
-    if mapper.n_gaussians > 30000:
-        idx = np.random.choice(mapper.n_gaussians, 30000, replace=False)
-        for k in mapper.params:
-            mapper.params[k] = torch.nn.Parameter(mapper.params[k].data[idx])
-        mapper._rebuild_optimizers()
-        mapper.state = mapper.strategy.initialize_state(scene_scale=1.0)
 
     print(f"  {mapper.n_gaussians} Gaussians")
     print(f"  Training {args.train_iters} iterations...")
