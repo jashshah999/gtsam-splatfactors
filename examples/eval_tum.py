@@ -127,9 +127,33 @@ def main():
         all_colors = all_colors[idx]
 
     gmap = GaussianMap.from_pointcloud(all_means, all_colors, device=device)
-    gmap.scales.data.fill_(-3.5)  # small Gaussians for real scenes
+    gmap.scales.data.fill_(-3.5)
     gmap.opacities.data.fill_(3.0)
-    print(f"  {gmap.n_gaussians} Gaussians initialized\n")
+    print(f"  {gmap.n_gaussians} Gaussians initialized")
+
+    # Train Gaussians on init frames
+    print("  Training Gaussians on init frames...")
+    from gsplat import rasterization as rast
+    map_opt = torch.optim.Adam(gmap.parameters(), lr=0.008)
+    for epoch in range(30):
+        total_loss = 0
+        for fi in range(min(args.init_frames, len(dataset))):
+            frame = dataset[fi]
+            vm = torch.inverse(torch.tensor(frame["pose"], dtype=torch.float32, device=device))
+            vm[1] = -vm[1]
+            target = torch.tensor(frame["rgb"], dtype=torch.float32, device=device)
+            map_opt.zero_grad()
+            rendered, _, _ = rast(
+                means=gmap.means, quats=gmap.quats, scales=gmap.scales,
+                opacities=gmap.opacities.sigmoid(), colors=gmap.colors,
+                viewmats=vm[None], Ks=K_torch[None], width=W, height=H)
+            loss = torch.nn.functional.mse_loss(rendered[0], target)
+            loss.backward()
+            map_opt.step()
+            total_loss += loss.item()
+        if epoch % 10 == 0:
+            print(f"    Epoch {epoch}: loss={total_loss/args.init_frames:.4f}")
+    print(f"  Training done.\n")
 
     # Phase 2: Track all frames
     print("Phase 2: Tracking...")
@@ -160,6 +184,27 @@ def main():
         err = np.linalg.norm(gt_pose[:3, 3] - est_pose[:3, 3])
         tracked_poses.append(est_pose)
         print(f"  Frame {i:3d}: err={err:.4f}m  ({dt:.1f}s)")
+
+        # Mapping: optimize Gaussians to match this frame
+        if i % 3 == 0:  # map every 3rd frame to save time
+            map_pose_t = torch.tensor(est_pose, dtype=torch.float32, device=device)
+            map_vm = torch.inverse(map_pose_t)
+            # Y-flip for gsplat
+            map_vm[1] = -map_vm[1]
+            target_t = torch.tensor(frame["rgb"], dtype=torch.float32, device=device)
+            map_opt = torch.optim.Adam(gmap.parameters(), lr=0.005)
+            for _ in range(20):
+                map_opt.zero_grad()
+                from gsplat import rasterization as rast
+                rendered, _, _ = rast(
+                    means=gmap.means, quats=gmap.quats,
+                    scales=gmap.scales, opacities=gmap.opacities.sigmoid(),
+                    colors=gmap.colors, viewmats=map_vm[None],
+                    Ks=K_torch[None], width=W, height=H)
+                loss = torch.nn.functional.mse_loss(rendered[0], target_t)
+                loss.backward()
+                map_opt.step()
+            print(f"           map loss: {loss.item():.4f}")
 
     # Phase 3: iSAM2 global optimization
     print("\nPhase 3: iSAM2 global optimization...")
