@@ -91,13 +91,38 @@ def main():
     init_frames = []
     for i in range(min(args.init_frames, len(dataset))):
         frame = dataset[i]
-        mapper.init_from_rgbd(frame["rgb"], frame["depth"], frame["pose"], K, stride=4)
+        mapper.init_from_rgbd(frame["rgb"], frame["depth"], frame["pose"], K, stride=8)
         init_frames.append(frame)
 
-    print(f"  {mapper.n_gaussians} initial Gaussians")
-    print(f"  Training for {args.train_iters} iterations...")
-    mapper.train_on_frames(init_frames, K_torch, W, H,
+    # Cap total Gaussians to fit in GPU memory
+    if mapper.n_gaussians > 50000:
+        idx = np.random.choice(mapper.n_gaussians, 50000, replace=False)
+        for k in mapper.params:
+            mapper.params[k] = torch.nn.Parameter(mapper.params[k].data[idx])
+        mapper._rebuild_optimizers()
+        mapper.state = mapper.strategy.initialize_state(scene_scale=1.0)
+
+    print(f"  {mapper.n_gaussians} Gaussians (capped)")
+
+    # Train at half resolution for speed, then fine-tune at full res
+    K_half = K_torch.clone()
+    K_half[0] /= 2; K_half[1] /= 2; K_half[0, 2] /= 2; K_half[1, 2] /= 2
+    K_half[2, 2] = 1.0
+    W_half, H_half = W // 2, H // 2
+
+    # Downsample init frame images
+    init_frames_half = []
+    for f in init_frames:
+        f_half = dict(f)
+        f_half["rgb"] = cv2.resize(f["rgb"], (W_half, H_half))
+        init_frames_half.append(f_half)
+
+    print(f"  Training {args.train_iters} iters at {W_half}x{H_half}...")
+    mapper.train_on_frames(init_frames_half, K_half, W_half, H_half,
                            n_iters=args.train_iters, log_every=100)
+
+    print(f"  Fine-tuning 100 iters at {W}x{H}...")
+    mapper.train_on_frames(init_frames, K_torch, W, H, n_iters=100, log_every=50)
 
     # Verify: render a trained view and save
     test_render = mapper.render(init_frames[0]["pose"], K_torch, W, H)
