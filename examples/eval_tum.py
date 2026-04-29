@@ -108,9 +108,10 @@ def main():
                 cv2.cvtColor(gt_img, cv2.COLOR_RGB2BGR))
     print(f"  Saved trained render vs GT to {args.output}/\n")
 
-    # === Phase 2: Track ===
-    print("Phase 2: Tracking...")
+    # === Phase 2: Track + Map alternating ===
+    print("Phase 2: Track + Map (alternating)...")
     gt_poses, tracked_poses, timestamps = [], [], []
+    keyframe_window = list(init_frames)  # sliding window of recent keyframes
 
     for i in range(len(dataset)):
         frame = dataset[i]
@@ -121,6 +122,7 @@ def main():
             tracked_poses.append(frame["pose"])
             continue
 
+        # --- Track ---
         init_pose = tracked_poses[-1].copy()
         t0 = time.time()
         est = track_frame(mapper, frame["rgb"], init_pose, K_torch, W, H, device,
@@ -128,12 +130,23 @@ def main():
         dt = time.time() - t0
         err = np.linalg.norm(frame["pose"][:3, 3] - est[:3, 3])
         tracked_poses.append(est)
-        print(f"  {i:3d}: err={err:.4f}m  ({dt:.1f}s)")
 
-        # Incremental mapping every 5 frames
-        if i % 5 == 0:
-            kf = {"rgb": frame["rgb"], "pose": est}
-            mapper.train_on_frames([kf], K_torch, W, H, n_iters=30, log_every=100)
+        # --- Map: add new Gaussians from this frame's depth ---
+        if frame.get("depth") is not None:
+            mapper.init_from_rgbd(frame["rgb"], frame["depth"], est, K, stride=8)
+
+        # --- Map: train on recent keyframe window ---
+        kf_entry = {"rgb": frame["rgb"], "pose": est}
+        keyframe_window.append(kf_entry)
+        if len(keyframe_window) > 10:
+            keyframe_window = keyframe_window[-10:]  # keep last 10
+
+        map_iters = 100 if (i % 3 == 0) else 30
+        mapper.train_on_frames(keyframe_window[-5:], K_torch, W, H,
+                               n_iters=map_iters, log_every=200)
+
+        map_n = mapper.n_gaussians
+        print(f"  {i:3d}: err={err:.4f}m  ({dt:.1f}s)  gs={map_n}")
 
     ate_track = np.mean([np.linalg.norm(g[:3,3] - e[:3,3])
                          for g, e in zip(gt_poses, tracked_poses)])
