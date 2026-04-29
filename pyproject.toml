@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gsplat-slam"
+version = "0.1.0"
+description = "Gaussian Splatting meets Factor Graph SLAM"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [{name = "Jash Shah", email = "jashshah999@gmail.com"}]
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.0",
+    "gtsam>=4.2",
+    "gsplat>=1.0",
+    "opencv-python>=4.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov"]
+
+[tool.setuptools.packages.find]
+include = ["gsplat_slam*"]
