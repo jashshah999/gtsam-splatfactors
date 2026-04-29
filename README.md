@@ -97,10 +97,12 @@ This is early-stage research code. Phase 1 (core factor + SLAM pipeline) is impl
 - [x] `GaussianMap` with point cloud initialization
 - [x] `SplatSLAM` incremental pipeline with iSAM2
 - [x] Loop closure support
-- [ ] Analytical Jacobians through gsplat autograd
-- [ ] Keyframe selection heuristics
-- [ ] Dense depth initialization from monocular depth
+- [ ] Tune photometric factor noise model and pixel sampling for better tracking
+- [ ] Analytical Jacobians through gsplat autograd (replace numerical ~13x faster)
+- [ ] Keyframe selection heuristics (overlap-based)
+- [ ] Dense depth initialization from monocular depth (ZoeDepth/DPT)
 - [ ] Benchmarks on TUM-RGBD / Replica
+- [ ] TUM-RGBD dataset loader and evaluation script
 
 ## How it compares
 
