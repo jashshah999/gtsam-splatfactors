@@ -13,6 +13,18 @@ This library bridges the two worlds. Camera poses live in a GTSAM factor graph (
 - **Principled uncertainty** — GTSAM gives covariances on all poses
 - **Modularity** — easily combine with IMU preintegration, wheel odometry, GPS, etc.
 
+## Demo
+
+**Trajectory recovery** on a synthetic scene (24 keyframes, circular trajectory with noisy initial poses, loop closure at the end):
+
+![Trajectory](assets/trajectory.png)
+
+**GT vs estimated rendering** — ground truth on the left, re-rendered from estimated pose on the right:
+
+![Comparison](assets/comparison_grid.png)
+
+See `examples/make_demo_video.py` for the full demo that generates a side-by-side video (`output/demo.mp4`).
+
 ## Architecture
 
 ```
