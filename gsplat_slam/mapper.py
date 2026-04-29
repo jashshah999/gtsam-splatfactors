@@ -106,8 +106,14 @@ class GaussianMapper:
             for k in self.params:
                 self.params[k] = nn.Parameter(self.params[k].data[valid])
 
+        # Cap total Gaussians to prevent OOM
+        max_gs = 200000
+        if self.n_gaussians > max_gs:
+            idx = torch.randperm(self.n_gaussians, device=self.device)[:max_gs]
+            for k in self.params:
+                self.params[k] = nn.Parameter(self.params[k].data[idx])
+
         self._rebuild_optimizers()
-        self.state = self.strategy.initialize_state(scene_scale=1.0)
 
     def _rebuild_optimizers(self):
         param_groups = [
