@@ -89,10 +89,9 @@ def main():
     mapper = GaussianMapper(device=device, refine_start=99999, refine_every=99999, reset_every=99999)
 
     init_frames = []
-    init_stride = max(8, args.init_frames)  # larger stride for more frames
     for i in range(min(args.init_frames, len(dataset))):
         frame = dataset[i]
-        mapper.init_from_rgbd(frame["rgb"], frame["depth"], frame["pose"], K, stride=init_stride)
+        mapper.init_from_rgbd(frame["rgb"], frame["depth"], frame["pose"], K, stride=4)
         init_frames.append(frame)
 
     print(f"  {mapper.n_gaussians} Gaussians")
