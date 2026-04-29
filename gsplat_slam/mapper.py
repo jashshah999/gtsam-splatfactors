@@ -71,7 +71,7 @@ class GaussianMapper:
         # roughly one pixel-stride in world space
         avg_depth = np.median(d)
         pixel_size = avg_depth * stride / ((fx + fy) / 2)
-        init_scale = max(pixel_size, 0.005)
+        init_scale = float(np.clip(pixel_size, 0.01, 0.1))
 
         if self.params is None:
             self.params = {
