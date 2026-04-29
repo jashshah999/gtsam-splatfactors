@@ -15,10 +15,10 @@ class GaussianMapper:
     def __init__(
         self,
         device: str = "cuda",
-        lr_means: float = 0.001,
-        lr_colors: float = 0.01,
-        lr_scales: float = 0.005,
-        lr_opacities: float = 0.01,
+        lr_means: float = 0.0005,
+        lr_colors: float = 0.02,
+        lr_scales: float = 0.01,
+        lr_opacities: float = 0.05,
         lr_quats: float = 0.001,
         refine_start: int = 200,
         refine_every: int = 100,
@@ -67,12 +67,18 @@ class GaussianMapper:
         colors = torch.tensor(colors_np, dtype=torch.float32, device=self.device)
         n = len(means)
 
+        # Compute initial scale from depth and stride: each Gaussian should cover
+        # roughly one pixel-stride in world space
+        avg_depth = np.median(d)
+        pixel_size = avg_depth * stride / ((fx + fy) / 2)
+        init_scale = np.log(max(pixel_size, 0.005))
+
         if self.params is None:
             self.params = {
                 "means": nn.Parameter(means),
                 "quats": nn.Parameter(torch.nn.functional.normalize(
                     torch.randn(n, 4, device=self.device), dim=-1)),
-                "scales": nn.Parameter(torch.full((n, 3), -4.0, device=self.device)),
+                "scales": nn.Parameter(torch.full((n, 3), init_scale, device=self.device)),
                 "opacities": nn.Parameter(torch.full((n,), 2.0, device=self.device)),
                 "colors": nn.Parameter(colors),
             }
@@ -89,7 +95,7 @@ class GaussianMapper:
                     new = torch.nn.functional.normalize(
                         torch.randn(n_new, 4, device=self.device), dim=-1)
                 elif k == "scales":
-                    new = torch.full((n_new, 3), -4.0, device=self.device)
+                    new = torch.full((n_new, 3), init_scale, device=self.device)
                 elif k == "opacities":
                     new = torch.full((n_new,), 2.0, device=self.device)
                 self.params[k] = nn.Parameter(torch.cat([old, new]))
