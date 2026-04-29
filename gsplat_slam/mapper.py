@@ -100,6 +100,12 @@ class GaussianMapper:
                     new = torch.full((n_new,), 2.0, device=self.device)
                 self.params[k] = nn.Parameter(torch.cat([old, new]))
 
+        # Remove any NaN/Inf Gaussians
+        valid = torch.isfinite(self.params["means"]).all(dim=1)
+        if not valid.all():
+            for k in self.params:
+                self.params[k] = nn.Parameter(self.params[k].data[valid])
+
         self._rebuild_optimizers()
         self.state = self.strategy.initialize_state(scene_scale=1.0)
 
@@ -118,6 +124,12 @@ class GaussianMapper:
     def train_step(self, rgb_target: torch.Tensor, viewmat: torch.Tensor,
                    K: torch.Tensor, W: int, H: int) -> float:
         """One training step: render, compute loss, backprop, densify."""
+        # Clamp scales to prevent numerical issues
+        with torch.no_grad():
+            self.params["scales"].data.clamp_(0.001, 1.0)
+            self.params["quats"].data = torch.nn.functional.normalize(
+                self.params["quats"].data, dim=-1)
+
         for opt in self.optimizers.values():
             opt.zero_grad()
 
