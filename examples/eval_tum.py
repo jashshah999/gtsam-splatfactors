@@ -86,7 +86,7 @@ def main():
 
     # === Phase 1: Build and train map ===
     print(f"Phase 1: Building map from {args.init_frames} frames...")
-    mapper = GaussianMapper(device=device, refine_start=100, refine_every=50, reset_every=500)
+    mapper = GaussianMapper(device=device, refine_start=99999, refine_every=99999, reset_every=99999)
 
     init_frames = []
     init_stride = max(8, args.init_frames)  # larger stride for more frames
