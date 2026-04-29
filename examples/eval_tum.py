@@ -106,8 +106,10 @@ def main():
 
     # Train at half resolution for speed, then fine-tune at full res
     K_half = K_torch.clone()
-    K_half[0] /= 2; K_half[1] /= 2; K_half[0, 2] /= 2; K_half[1, 2] /= 2
-    K_half[2, 2] = 1.0
+    K_half[0, 0] /= 2  # fx
+    K_half[1, 1] /= 2  # fy
+    K_half[0, 2] /= 2  # cx
+    K_half[1, 2] /= 2  # cy
     W_half, H_half = W // 2, H // 2
 
     # Downsample init frame images
