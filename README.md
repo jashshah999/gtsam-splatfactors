@@ -15,15 +15,21 @@ This library bridges the two worlds. Camera poses live in a GTSAM factor graph (
 
 ## Demo
 
-**Trajectory recovery** on a synthetic scene (24 keyframes, circular trajectory with noisy initial poses, loop closure at the end):
+Synthetic room scene (22k Gaussians) — camera tracks a circular trajectory with 5cm noise injected into initial poses. Photometric factors correct the poses via LM optimization, then iSAM2 enforces global consistency with loop closure.
+
+**Tracking: Ground Truth | Noisy Initial | After Optimization**
+
+![Demo](assets/demo.gif)
+
+**Trajectory + per-frame error reduction**
 
 ![Trajectory](assets/trajectory.png)
 
-**GT vs estimated rendering** — ground truth on the left, re-rendered from estimated pose on the right:
+ATE: **0.075m** (noisy init) → **0.033m** (after photometric tracking) → **0.038m** (after iSAM2 + loop closure). 20/24 frames improved.
 
-![Comparison](assets/comparison_grid.png)
+> This is a synthetic proof-of-concept. Real-dataset evaluation (TUM-RGBD, Replica) is the next milestone — see roadmap below.
 
-See `examples/make_demo_video.py` for the full demo that generates a side-by-side video (`output/demo.mp4`).
+Run the demo yourself: `python examples/make_demo_video.py` (requires CUDA GPU).
 
 ## Architecture
 
