@@ -4,22 +4,32 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gsplat-slam"
-version = "0.1.0"
-description = "Gaussian Splatting meets Factor Graph SLAM"
+version = "0.2.0"
+description = "3DGS-SLAM with iSAM2 factor graph backend. Loop closure, IMU fusion, monocular depth, COLMAP export."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [{name = "Jash Shah", email = "jashshah999@gmail.com"}]
+keywords = ["gaussian-splatting", "slam", "factor-graph", "gtsam", "isam2", "3d-reconstruction", "loop-closure"]
 dependencies = [
     "numpy>=1.24",
     "torch>=2.0",
-    "gtsam>=4.2",
-    "gsplat>=1.0",
     "opencv-python>=4.8",
+    "scipy>=1.10",
+    "click>=8.0",
+    "tqdm",
 ]
 
 [project.optional-dependencies]
+full = ["gtsam>=4.2", "gsplat>=1.0", "viser>=0.2"]
 dev = ["pytest>=7.0", "pytest-cov"]
+
+[project.scripts]
+gsplat-slam = "gsplat_slam.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/jashshah999/gtsam-splatfactors"
+Issues = "https://github.com/jashshah999/gtsam-splatfactors/issues"
 
 [tool.setuptools.packages.find]
 include = ["gsplat_slam*"]
