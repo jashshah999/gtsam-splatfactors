@@ -124,14 +124,15 @@ This is early-stage research code. Phase 1 (core factor + SLAM pipeline) is impl
 - [x] `GaussianSplatFactor` with numerical Jacobians
 - [x] `GaussianMap` with point cloud initialization
 - [x] `SplatSLAM` incremental pipeline with iSAM2
-- [x] Loop closure support
+- [x] Loop closure support (manual + automatic DINOv2 detection)
 - [x] TUM-RGBD dataset loader and evaluation script
 - [x] Gaussian map training with L1 loss (converges to 0.04 on synthetic, 0.11 on TUM)
-- [ ] Dense incremental mapping (more iters per keyframe, add Gaussians from tracked frames)
+- [x] Monocular depth initialization (Depth Anything V2, ZoeDepth)
+- [x] Keyframe selection (translation + rotation + overlap heuristics)
+- [x] Automatic loop detection via DINOv2 + photometric verification
+- [x] COLMAP / nerfstudio / PLY export
 - [ ] Densification (gsplat DefaultStrategy — currently causes FPE, needs debugging)
 - [ ] Analytical Jacobians through gsplat autograd (replace numerical, ~10x faster)
-- [ ] Keyframe selection heuristics (overlap-based)
-- [ ] Monocular depth initialization (ZoeDepth/DPT)
 
 ## How it compares
 
