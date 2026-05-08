@@ -1,17 +1,43 @@
 # gtsam-splatfactors
 
-**Gaussian Splatting meets Factor Graph SLAM** — iSAM2 incremental pose optimization with differentiable rendering factors.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-## What is this?
+**3DGS-SLAM with a real SLAM backend.** Loop closure, IMU fusion, uncertainty -- things SplaTAM and MonoGS can't do.
 
-Current 3DGS-SLAM systems (SplaTAM, MonoGS, Photo-SLAM) optimize camera poses via gradient descent through a differentiable rasterizer. They work, but they lack the infrastructure that factor graph SLAM provides: loop closure, incremental Bayes tree updates, proper marginalization, and principled uncertainty estimation.
+## The Problem
 
-This library bridges the two worlds. Camera poses live in a GTSAM factor graph (iSAM2), and photometric errors from Gaussian splatting rendering are expressed as GTSAM factors. You get:
+Every 3DGS-SLAM system (SplaTAM, MonoGS, Photo-SLAM, GS-ICP-SLAM) optimizes poses via **gradient descent** through a differentiable rasterizer. This works for tracking, but fundamentally cannot do:
 
-- **Loop closure** — add a rendering factor between any two keyframes and iSAM2 corrects all poses
-- **Incremental updates** — iSAM2's Bayes tree avoids re-optimizing from scratch on every frame
-- **Principled uncertainty** — GTSAM gives covariances on all poses
-- **Modularity** — easily combine with IMU preintegration, wheel odometry, GPS, etc.
+| Capability | Gradient Descent | Factor Graph (this repo) |
+|-----------|-----------------|--------------------------|
+| Loop closure (correct all poses when revisiting) | No | Yes |
+| Incremental updates (O(log n) per frame) | No (re-optimize all) | Yes (iSAM2 Bayes tree) |
+| Pose uncertainty / covariance | No | Yes |
+| IMU / GPS / wheel odometry fusion | No | Yes (add factors) |
+| Robust outlier rejection | No | Yes (Cauchy/Huber) |
+
+These aren't nice-to-haves -- they're required for any SLAM system that operates beyond a single room. SplaTAM drifts. MonoGS drifts. This repo fixes that.
+
+## How It Works
+
+Camera poses live in a GTSAM factor graph. Photometric errors from gsplat rendering are expressed as GTSAM factors. You get rendering-quality tracking AND all the factor graph infrastructure:
+
+```
+Camera poses (Pose3)          Gaussian map (means, colors, ...)
+        |                              |
+   +----------+                   +----------+
+   |  iSAM2   |<-- SplatFactor -->|  gsplat  |
+   |  (GTSAM) |   (photometric    | renderer |
+   +----------+    residual)      +----------+
+        |
+   Odometry factors
+   Loop closure factors (DINOv2 + photometric verification)
+   IMU preintegration factors
+   Prior factors
+```
+
+When a loop closure is detected, iSAM2 corrects ALL downstream poses in O(log n) -- not gradient descent on the whole trajectory.
 
 ## Demo
 
