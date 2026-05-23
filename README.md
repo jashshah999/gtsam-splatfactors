@@ -41,17 +41,19 @@ When a loop closure is detected, iSAM2 corrects ALL downstream poses in O(log n)
 
 ## Results
 
-### TUM fr1/desk (199 frames) — Loop Closure on Real Data
+### TUM-RGBD Benchmark — Loop Closure on Real Data
 
 ![Loop Closure Result](assets/tum_loop_closure.png)
 
-| Method | ATE (m) | Improvement |
-|--------|---------|-------------|
-| PnP Visual Odometry | 0.161 | — |
-| iSAM2 (odometry only) | 0.161 | 0% |
-| **iSAM2 + DINOv2 Loop Closure** | **0.055** | **65.7%** |
+| Sequence | VO ATE | iSAM2 + Loop Closure | Improvement |
+|----------|--------|---------------------|-------------|
+| fr1/desk (199 frames) | 0.161m | **0.055m** | **66%** |
+| fr1/xyz (199 frames) | 0.102m | **0.021m** | **79%** |
+| fr1/room (199 frames) | 0.308m | 0.251m | 18% |
 
-50 loop closures detected via DINOv2 appearance matching + PnP geometric verification. The factor graph propagates corrections globally through the Bayes tree.
+DINOv2 appearance matching detects revisited locations. PnP with depth gives geometric verification. iSAM2 propagates corrections globally through the Bayes tree in O(log n).
+
+fr1/xyz (figure-8 trajectory) shows the strongest improvement because it has the most revisits. fr1/room has fewer detectable loop closures (only 5 vs 50).
 
 ### Synthetic Demo (22k Gaussians)
 
