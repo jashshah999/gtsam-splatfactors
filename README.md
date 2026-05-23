@@ -43,6 +43,8 @@ When a loop closure is detected, iSAM2 corrects ALL downstream poses in O(log n)
 
 ### TUM-RGBD Benchmark — Loop Closure on Real Data
 
+![Loop Closure Animation](assets/loop_closure_xyz.gif)
+
 ![Loop Closure Result](assets/tum_loop_closure.png)
 
 | Sequence | VO ATE | iSAM2 + Loop Closure | Improvement |
