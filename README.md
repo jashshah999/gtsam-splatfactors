@@ -39,9 +39,21 @@ Camera poses (Pose3)          Gaussian map (means, colors, ...)
 
 When a loop closure is detected, iSAM2 corrects ALL downstream poses in O(log n) -- not gradient descent on the whole trajectory.
 
-## Demo
+## Results
 
-Synthetic room scene (22k Gaussians) — camera tracks a circular trajectory with 5cm noise injected into initial poses. Photometric factors correct the poses via LM optimization, then iSAM2 enforces global consistency with loop closure.
+### TUM fr1/desk (199 frames) — Loop Closure on Real Data
+
+![Loop Closure Result](assets/tum_loop_closure.png)
+
+| Method | ATE (m) | Improvement |
+|--------|---------|-------------|
+| PnP Visual Odometry | 0.161 | — |
+| iSAM2 (odometry only) | 0.161 | 0% |
+| **iSAM2 + DINOv2 Loop Closure** | **0.055** | **65.7%** |
+
+50 loop closures detected via DINOv2 appearance matching + PnP geometric verification. The factor graph propagates corrections globally through the Bayes tree.
+
+### Synthetic Demo (22k Gaussians)
 
 **Tracking: Ground Truth | Noisy Initial | After Optimization**
 
