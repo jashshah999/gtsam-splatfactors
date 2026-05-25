@@ -1,15 +1,17 @@
-"""Gaussian map trainer using gsplat's DefaultStrategy for densification."""
+"""Gaussian map trainer with incremental densification."""
 
 import torch
 import torch.nn as nn
 import numpy as np
-from gsplat import rasterization, DefaultStrategy
+from gsplat import rasterization
+
+from gsplat_slam.densification import IncrementalDensifier
 
 
 class GaussianMapper:
     """Trains and maintains a Gaussian splat map from RGB-D keyframes.
 
-    Uses gsplat's DefaultStrategy for automatic densification (split/clone/prune).
+    Uses IncrementalDensifier for gradient-based split/clone/prune.
     """
 
     def __init__(
@@ -20,23 +22,20 @@ class GaussianMapper:
         lr_scales: float = 0.01,
         lr_opacities: float = 0.05,
         lr_quats: float = 0.001,
-        refine_start: int = 200,
-        refine_every: int = 100,
-        reset_every: int = 1000,
+        densify_every: int = 100,
+        prune_every: int = 200,
+        densify_start: int = 200,
+        **kwargs,
     ):
         self.device = device
         self.params = None
         self.optimizers = None
-        self.strategy = DefaultStrategy(
-            refine_start_iter=refine_start,
-            refine_every=refine_every,
-            reset_every=reset_every,
-            grow_grad2d=0.0002,
-            prune_opa=0.005,
-            prune_scale3d=0.1,
-            verbose=False,
+        self.densifier = IncrementalDensifier(
+            densify_every=densify_every,
+            prune_every=prune_every,
+            device=device,
         )
-        self.state = None
+        self.densify_start = densify_start
         self.global_step = 0
         self.lr_config = {
             "means": lr_means, "colors": lr_colors, "scales": lr_scales,
@@ -133,7 +132,7 @@ class GaussianMapper:
 
     def train_step(self, rgb_target: torch.Tensor, viewmat: torch.Tensor,
                    K: torch.Tensor, W: int, H: int) -> float:
-        """One training step: render, compute loss, backprop."""
+        """One training step: render, compute loss, backprop, densify."""
         with torch.no_grad():
             self.params["scales"].data.clamp_(0.001, 2.0)
             self.params["quats"].data = torch.nn.functional.normalize(
@@ -158,6 +157,17 @@ class GaussianMapper:
         self.optimizer.step()
 
         self.global_step += 1
+
+        # Densification
+        if self.global_step >= self.densify_start:
+            self.densifier.accumulate_gradients(self.params["means"])
+            if self.densifier.should_densify():
+                self.params = self.densifier.densify(self.params)
+                self._rebuild_optimizers()
+            if self.densifier.should_prune():
+                self.params = self.densifier.prune(self.params)
+                self._rebuild_optimizers()
+
         return loss.item()
 
     def train_on_frames(self, frames: list, K_torch: torch.Tensor,

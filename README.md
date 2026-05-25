@@ -57,6 +57,14 @@ DINOv2 appearance matching detects revisited locations. PnP with depth gives geo
 
 fr1/xyz (figure-8 trajectory) shows the strongest improvement because it has the most revisits. fr1/room has fewer detectable loop closures (only 5 vs 50).
 
+### KITTI Odometry — Outdoor Automotive
+
+```bash
+python examples/eval_kitti.py --seq 0 --max-frames 500
+```
+
+Uses stereo depth + PnP VO + iSAM2 with Cauchy robust kernels + DINOv2 loop closure. Demonstrates the system scales to large outdoor environments with significant trajectory lengths (hundreds of meters).
+
 ### Synthetic Demo (22k Gaussians)
 
 **Tracking: Ground Truth | Noisy Initial | After Optimization**
@@ -138,7 +146,7 @@ The core contribution is `GaussianSplatFactor` — a GTSAM-compatible factor tha
 
 1. Renders the Gaussian map from a candidate camera pose using gsplat
 2. Computes photometric residuals at sampled pixel locations
-3. Provides Jacobians for GTSAM's optimizer (numerical, through the Lie algebra)
+3. Provides analytical Jacobians via torch.autograd, respecting GTSAM's right-exponential update convention
 
 ```python
 from gsplat_slam import GaussianSplatFactor
@@ -159,6 +167,12 @@ gtsam_factor = factor.as_gtsam_factor(pose_key, noise_model)
 graph.add(gtsam_factor)
 ```
 
+### Analytical Jacobians (torch.autograd)
+
+The Jacobian is computed by parameterizing the viewmat as `exp(-hat(xi)) @ viewmat0` where `xi` is the 6D tangent vector (se(3)). At `xi=0`, the first-order expansion gives `(I - hat(xi)) @ viewmat0`, which torch.autograd differentiates through the gsplat rasterizer. This correctly handles GTSAM's right-exponential update convention (the error is left-invariant).
+
+Verified against numerical central differences via `test_analytical_jacobian.py` — matches within 5% relative tolerance. ~10x faster than numerical (1 render + autograd vs 13 renders).
+
 ## Status
 
 This is early-stage research code. Phase 1 (core factor + SLAM pipeline) is implemented. Contributions welcome.
@@ -173,8 +187,10 @@ This is early-stage research code. Phase 1 (core factor + SLAM pipeline) is impl
 - [x] Keyframe selection (translation + rotation + overlap heuristics)
 - [x] Automatic loop detection via DINOv2 + photometric verification
 - [x] COLMAP / nerfstudio / PLY export
-- [ ] Densification (gsplat DefaultStrategy — currently causes FPE, needs debugging)
-- [ ] Analytical Jacobians through gsplat autograd (replace numerical, ~10x faster)
+- [x] Analytical Jacobians via torch.autograd through gsplat (right-exponential, ~10x faster)
+- [x] Densification (gradient-based split/clone/prune, incremental)
+- [x] KITTI Odometry evaluation (outdoor automotive sequences)
+- [ ] Joint pose + Gaussian optimization
 
 ## How it compares
 

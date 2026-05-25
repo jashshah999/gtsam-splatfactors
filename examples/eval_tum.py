@@ -86,7 +86,7 @@ def main():
 
     # === Phase 1: Build and train map ===
     print(f"Phase 1: Building map from {args.init_frames} frames...")
-    mapper = GaussianMapper(device=device, refine_start=99999, refine_every=99999, reset_every=99999)
+    mapper = GaussianMapper(device=device, densify_start=99999)
 
     init_frames = []
     for i in range(min(args.init_frames, len(dataset))):

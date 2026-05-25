@@ -46,11 +46,13 @@ class GaussianSplatFactor:
         W: int,
         H: int,
         device: str = "cuda",
+        use_analytical: bool = True,
     ):
         self.gaussian_map = gaussian_map
         self.device = device
         self.H = H
         self.W = W
+        self.use_analytical = use_analytical
 
         if isinstance(target_image, np.ndarray):
             target_image = torch.tensor(target_image, dtype=torch.float32)
@@ -92,18 +94,28 @@ class GaussianSplatFactor:
     def evaluate(self, pose):
         """Evaluate the residual and Jacobian for a gtsam.Pose3.
 
-        The Jacobian is computed via central differences in the Pose3 tangent
-        space (Lie algebra).  This avoids having to chain-rule through
-        torch.inverse and the Lie group retraction, and is robust to the
-        discontinuities in the rasterizer.
+        Uses analytical Jacobians (torch.autograd through gsplat) by default,
+        with fallback to numerical central differences.
 
         Returns:
             residual: (n_residuals,) numpy array
             jacobian: (n_residuals, 6) numpy array, derivative w.r.t. Pose3 tangent
         """
+        if self.use_analytical:
+            return self._analytical_evaluate(pose)
         residual_np = self._eval_residual_np(pose)
         J_pose = self._numeric_jacobian(pose)
         return residual_np, J_pose
+
+    def _analytical_evaluate(self, pose):
+        """Compute residual + Jacobian via torch.autograd (single render pass)."""
+        from gsplat_slam.analytical_jacobian import compute_analytical_jacobian
+        T_world_cam = gtsam_to_torch_pose(pose, device=self.device)
+        viewmat0 = torch.inverse(T_world_cam)
+        return compute_analytical_jacobian(
+            self.gaussian_map, self.target_image, self.K,
+            self.pixel_indices, self.W, self.H, viewmat0, self.device,
+        )
 
     def _numeric_jacobian(self, pose, eps=1e-5):
         """6-column Jacobian via central differences in the Pose3 tangent space."""

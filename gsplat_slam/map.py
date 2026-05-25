@@ -73,12 +73,21 @@ class GaussianMap(nn.Module):
         else:
             new_colors = torch.full((n_new, 3), 0.5, device=self.device)
 
-        self.means = nn.Parameter(torch.cat([self.means.data, means]))
-        self.quats = nn.Parameter(torch.cat([self.quats.data, new_quats]))
-        self.scales = nn.Parameter(torch.cat([self.scales.data, new_scales]))
-        self.opacities = nn.Parameter(torch.cat([self.opacities.data, new_opacities]))
-        self.colors = nn.Parameter(torch.cat([self.colors.data, new_colors]))
+        if self.n_gaussians == 0:
+            self.means = nn.Parameter(means)
+            self.quats = nn.Parameter(new_quats)
+            self.scales = nn.Parameter(new_scales)
+            self.opacities = nn.Parameter(new_opacities)
+            self.colors = nn.Parameter(new_colors)
+        else:
+            self.means = nn.Parameter(torch.cat([self.means.data, means]))
+            self.quats = nn.Parameter(torch.cat([self.quats.data, new_quats]))
+            self.scales = nn.Parameter(torch.cat([self.scales.data, new_scales]))
+            self.opacities = nn.Parameter(torch.cat([self.opacities.data, new_opacities]))
+            self.colors = nn.Parameter(torch.cat([self.colors.data, new_colors]))
 
     @property
     def n_gaussians(self) -> int:
+        if not hasattr(self, 'means'):
+            return 0
         return len(self.means)
