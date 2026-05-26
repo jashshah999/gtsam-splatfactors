@@ -16,13 +16,16 @@ Every existing 3DGS-SLAM system (SplaTAM, MonoGS, Photo-SLAM) optimizes poses vi
 
 ## Results
 
-### KITTI Odometry (Outdoor, 695m trajectory)
+### KITTI Odometry (Outdoor, up to 1.5km trajectories)
 
-![KITTI Seq 07](assets/kitti_07.png)
+![KITTI Seq 00](assets/kitti_00.png)
 
-| Sequence | VO ATE | iSAM2 + LC | Improvement |
-|----------|--------|-----------|-------------|
-| KITTI 07 (1101 frames) | 9.67m | **1.49m** | **84.6%** |
+| Sequence | Trajectory | VO ATE | iSAM2 + LC | Improvement |
+|----------|-----------|--------|-----------|-------------|
+| 00 (800 frames) | 1483m | 29.14m | **7.76m** | **73.4%** |
+| 05 (800 frames) | 937m | 21.66m | **12.24m** | **43.5%** |
+| 07 (550 frames) | 373m | 9.67m | **1.49m** | **84.6%** |
+| 09 (531 frames) | 823m | 45.24m | **10.56m** | **76.7%** |
 
 ### TUM-RGBD (Indoor)
 
