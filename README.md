@@ -59,11 +59,17 @@ fr1/xyz (figure-8 trajectory) shows the strongest improvement because it has the
 
 ### KITTI Odometry — Outdoor Automotive
 
+![KITTI Seq 07](assets/kitti_07.png)
+
+| Sequence | Trajectory | VO ATE | iSAM2 + Loop Closure | Improvement |
+|----------|-----------|--------|---------------------|-------------|
+| 07 (1101 frames, 695m) | Urban loop | 9.67m | **1.49m** | **84.6%** |
+
 ```bash
-python examples/eval_kitti.py --seq 0 --max-frames 500
+python examples/eval_kitti.py --seq 7 --data-root data/kitti
 ```
 
-Uses stereo depth + PnP VO + iSAM2 with Cauchy robust kernels + DINOv2 loop closure. Demonstrates the system scales to large outdoor environments with significant trajectory lengths (hundreds of meters).
+Uses stereo depth (StereoSGBM) + PnP VO + iSAM2 with Cauchy robust kernels + DINOv2 loop closure (top-20 highest confidence candidates). Demonstrates the system scales to large outdoor environments with hundreds of meters of driving.
 
 ### Synthetic Demo (22k Gaussians)
 

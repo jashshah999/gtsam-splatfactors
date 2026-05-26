@@ -25,7 +25,7 @@ from gsplat_slam.pose_utils import matrix_to_pose3, pose3_to_matrix
 
 def pnp_odometry(prev_rgb, curr_rgb, prev_depth, K, prev_pose):
     """Compute relative pose via ORB feature matching + PnP."""
-    orb = cv2.ORB_create(2000)
+    orb = cv2.ORB_create(3000)
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
     prev_gray = (prev_rgb * 255).astype(np.uint8)
@@ -42,7 +42,7 @@ def pnp_odometry(prev_rgb, curr_rgb, prev_depth, K, prev_pose):
         return prev_pose
 
     matches = bf.match(des1, des2)
-    matches = sorted(matches, key=lambda m: m.distance)[:500]
+    matches = sorted(matches, key=lambda m: m.distance)[:800]
 
     if len(matches) < 10:
         return prev_pose
@@ -60,7 +60,7 @@ def pnp_odometry(prev_rgb, curr_rgb, prev_depth, K, prev_pose):
             continue
         if 0 <= row < H and 0 <= col < W:
             d = prev_depth[row, col]
-            if 0.5 < d < 80.0:
+            if 1.0 < d < 50.0:  # cap at 50m for reliable stereo depth
                 x = (col - cx) * d / fx
                 y = (row - cy) * d / fy
                 pt_cam = np.array([x, y, d, 1.0])
@@ -68,7 +68,7 @@ def pnp_odometry(prev_rgb, curr_rgb, prev_depth, K, prev_pose):
                 pts_3d.append(pt_world)
                 pts_2d.append(pt2)
 
-    if len(pts_3d) < 6:
+    if len(pts_3d) < 8:
         return prev_pose
 
     pts_3d = np.array(pts_3d, dtype=np.float64)
@@ -77,11 +77,11 @@ def pnp_odometry(prev_rgb, curr_rgb, prev_depth, K, prev_pose):
 
     success, rvec, tvec, inliers = cv2.solvePnPRansac(
         pts_3d, pts_2d, cam_mat, None,
-        iterationsCount=200, reprojectionError=3.0,
+        iterationsCount=500, reprojectionError=2.0,
         flags=cv2.SOLVEPNP_ITERATIVE,
     )
 
-    if not success or inliers is None or len(inliers) < 6:
+    if not success or inliers is None or len(inliers) < 8:
         return prev_pose
 
     R, _ = cv2.Rodrigues(rvec)
@@ -204,37 +204,41 @@ def main():
                 device=device,
             )
 
-            # Build descriptor database
-            print("  Building DINOv2 descriptors...")
+            # Detect loops (add_frame builds database, detect queries it)
+            print("  Building DINOv2 descriptors and detecting loops...")
+            loops = []
             for i in range(len(dataset)):
                 frame = dataset[i]
                 detector.add_frame(frame["rgb"], i)
+                if i >= args.lc_min_gap:
+                    matches = detector.detect(frame["rgb"], i)
+                    for j, score in matches:
+                        loops.append((j, i, score))
 
-            # Detect loops
-            loops = []
-            for i in range(args.lc_min_gap, len(dataset)):
-                matches = detector.detect(i)
-                for j, score in matches:
-                    loops.append((j, i, score))
+            # Keep only top-k highest confidence loops to avoid false positives
+            loops.sort(key=lambda x: -x[2])
+            max_loops = min(20, len(loops))
+            loops = loops[:max_loops]
+            print(f"  Detected {len(loops)} loop closure candidates (top-{max_loops})")
 
-            print(f"  Detected {len(loops)} loop closure candidates")
-
-            # Add loop closure factors
+            # Add loop closure factors with geometric verification
             graph_lc = gtsam.NonlinearFactorGraph()
             for j, i, score in loops:
                 if dataset[j]["depth"] is not None:
-                    # Compute relative pose via PnP
+                    # Compute relative pose: PnP gives T_cj (pose of camera i in frame j's 3D)
                     rel_pose = pnp_odometry(
                         dataset[j]["rgb"], dataset[i]["rgb"],
                         dataset[j]["depth"], K, np.eye(4),
                     )
-                    if np.linalg.norm(rel_pose[:3, 3]) < 50.0:  # sanity check
+                    # Sanity: relative translation should be small for a true loop
+                    rel_t = np.linalg.norm(rel_pose[:3, 3])
+                    if 0.1 < rel_t < 30.0:
                         key_j = gtsam.symbol('x', j)
                         key_i = gtsam.symbol('x', i)
                         between = matrix_to_pose3(rel_pose)
                         lc_noise = gtsam.noiseModel.Robust.Create(
-                            gtsam.noiseModel.mEstimator.Cauchy.Create(0.5),
-                            gtsam.noiseModel.Isotropic.Sigma(6, 0.2),
+                            gtsam.noiseModel.mEstimator.Cauchy.Create(1.0),
+                            gtsam.noiseModel.Isotropic.Sigma(6, 0.5),
                         )
                         graph_lc.add(gtsam.BetweenFactorPose3(key_j, key_i, between, lc_noise))
                         n_lc += 1

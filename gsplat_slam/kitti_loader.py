@@ -46,11 +46,17 @@ def read_kitti_calib(filepath: str) -> dict:
     return calib
 
 
-def get_kitti_intrinsics(calib_path: str) -> np.ndarray:
-    """Get 3x3 intrinsics matrix for left color camera (P2)."""
+def get_kitti_intrinsics(calib_path: str, camera: str = None) -> np.ndarray:
+    """Get 3x3 intrinsics matrix. Uses P0 for grayscale, P2 for color."""
     calib = read_kitti_calib(calib_path)
-    P2 = calib["P2"].reshape(3, 4)
-    K = P2[:3, :3]
+    if camera and camera.startswith("image_2"):
+        key = "P2"
+    elif "P0" in calib:
+        key = "P0"
+    else:
+        key = "P2"
+    P = calib[key].reshape(3, 4)
+    K = P[:3, :3]
     return K
 
 
@@ -63,13 +69,12 @@ class KITTIDataset:
         data_root: str = "data/kitti",
         stride: int = 1,
         max_frames: int = -1,
-        image_cam: str = "image_2",
+        image_cam: str = None,
     ):
         assert 0 <= seq_id <= 10, f"Only sequences 00-10 have GT. Got {seq_id}"
         self.seq_id = seq_id
         self.data_root = data_root
         self.stride = stride
-        self.image_cam = image_cam
 
         seq_dir = os.path.join(data_root, "sequences", f"{seq_id:02d}")
         assert os.path.isdir(seq_dir), (
@@ -77,9 +82,17 @@ class KITTIDataset:
             f"Download from https://www.cvlibs.net/datasets/kitti/eval_odometry.php"
         )
 
+        # Auto-detect: prefer color (image_2), fall back to grayscale (image_0)
+        if image_cam is None:
+            if os.path.isdir(os.path.join(seq_dir, "image_2")):
+                image_cam = "image_2"
+            else:
+                image_cam = "image_0"
+        self.image_cam = image_cam
+
         # Calibration
         calib_path = os.path.join(seq_dir, "calib.txt")
-        self.K = get_kitti_intrinsics(calib_path)
+        self.K = get_kitti_intrinsics(calib_path, camera=image_cam)
 
         # Poses
         pose_path = os.path.join(data_root, "poses", f"{seq_id:02d}.txt")
@@ -108,11 +121,14 @@ class KITTIDataset:
 
     def __getitem__(self, idx):
         frame_idx = self.indices[idx]
-        rgb = cv2.imread(self.image_files[frame_idx])
-        rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        img = cv2.imread(self.image_files[frame_idx])
+        if img.ndim == 2 or img.shape[2] == 1:
+            rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB).astype(np.float32) / 255.0
+        else:
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         return {
             "rgb": rgb,
-            "depth": None,  # KITTI stereo depth can be computed but not stored directly
+            "depth": None,
             "pose": self.poses[frame_idx],
             "frame_id": frame_idx,
         }
@@ -153,7 +169,10 @@ class KITTIStereoDataset(KITTIDataset):
         super().__init__(**kwargs)
         self.baseline = baseline
         seq_dir = os.path.join(self.data_root, "sequences", f"{self.seq_id:02d}")
-        self.right_dir = os.path.join(seq_dir, "image_3")
+        # Try color pair (image_2/image_3) first, fall back to grayscale (image_0/image_1)
+        right_color = os.path.join(seq_dir, "image_3")
+        right_gray = os.path.join(seq_dir, "image_1")
+        self.right_dir = right_color if os.path.isdir(right_color) else right_gray
 
     def __getitem__(self, idx):
         frame = super().__getitem__(idx)
