@@ -1,7 +1,7 @@
 """Analytical Jacobian computation for GaussianSplatFactor.
 
 Computes the Jacobian of the photometric residual w.r.t. the Pose3 tangent
-space (se(3)) using forward differences through the se(3) generators.
+space (se(3)) using central differences through the se(3) generators.
 
 GTSAM convention: right-exponential update, i.e. T_new = T * Exp(xi).
 The error is left-invariant. We compute d(residual)/d(xi) at xi=0.
@@ -9,9 +9,9 @@ The error is left-invariant. We compute d(residual)/d(xi) at xi=0.
 The viewmat is parameterized as: viewmat(xi) = Exp(-xi) * viewmat0
 First-order: viewmat(xi) ≈ (I - hat(xi)) * viewmat0
 
-This gives 7 GPU renders total (1 base + 6 perturbed) vs 13 for the
-original central-differences approach, with all computation on GPU and
-no GTSAM Pose3.retract() calls in the inner loop.
+Central differences give O(eps^2) accuracy (matching GTSAM's numerical_derivative).
+Total cost: 12 GPU renders (2 per tangent direction), all on GPU with no
+GTSAM Pose3.retract() calls in the inner loop.
 """
 
 import torch
@@ -63,8 +63,9 @@ def compute_analytical_jacobian(
 ):
     """Compute Jacobian of photometric residual w.r.t. se(3).
 
-    Uses forward differences along the 6 se(3) generator directions.
-    Total cost: 7 renders (1 base + 6 perturbed), all on GPU.
+    Uses central differences along the 6 se(3) generator directions.
+    Total cost: 12 renders (2 per direction) + 1 base render, all on GPU.
+    Accuracy: O(eps^2), matching GTSAM's numerical_derivative.
 
     Args:
         gaussian_map: GaussianMap with means, quats, scales, opacities, colors
@@ -94,7 +95,7 @@ def compute_analytical_jacobian(
     target_d = target_image.detach()
 
     with torch.no_grad():
-        # Base render
+        # Base render (for residual only)
         rendered_base, _, _ = render_gaussians(
             means=means, quats=quats, scales=scales,
             opacities=opacities, colors=colors,
@@ -103,18 +104,28 @@ def compute_analytical_jacobian(
         residual_base = compute_photometric_residual(rendered_base, target_d, pixel_indices)
         residual_np = residual_base.cpu().numpy()
 
-        # 6 perturbed renders
+        # Central differences: 12 renders (+ and - for each of 6 directions)
         n = len(residual_np)
         jacobian = np.zeros((n, 6), dtype=np.float64)
 
+        I4 = torch.eye(4, device=device)
         for i in range(6):
-            vm_pert = (torch.eye(4, device=device) - eps * generators[i]) @ vm0
-            rendered_p, _, _ = render_gaussians(
+            vm_plus = (I4 - eps * generators[i]) @ vm0
+            vm_minus = (I4 + eps * generators[i]) @ vm0
+
+            rendered_plus, _, _ = render_gaussians(
                 means=means, quats=quats, scales=scales,
                 opacities=opacities, colors=colors,
-                viewmat=vm_pert, K=K_d, W=W, H=H,
+                viewmat=vm_plus, K=K_d, W=W, H=H,
             )
-            res_pert = compute_photometric_residual(rendered_p, target_d, pixel_indices)
-            jacobian[:, i] = (res_pert.cpu().numpy() - residual_np) / eps
+            rendered_minus, _, _ = render_gaussians(
+                means=means, quats=quats, scales=scales,
+                opacities=opacities, colors=colors,
+                viewmat=vm_minus, K=K_d, W=W, H=H,
+            )
+
+            res_plus = compute_photometric_residual(rendered_plus, target_d, pixel_indices)
+            res_minus = compute_photometric_residual(rendered_minus, target_d, pixel_indices)
+            jacobian[:, i] = (res_plus.cpu().numpy() - res_minus.cpu().numpy()) / (2 * eps)
 
     return residual_np, jacobian

@@ -73,11 +73,11 @@ def test_analytical_matches_numerical():
     np.testing.assert_allclose(res_ana, res_num, atol=1e-5,
                                err_msg="Residuals differ between analytical and numerical")
 
-    # Jacobians should match within numerical tolerance
-    # Normalize by max abs value to get relative error
+    # Both use central differences (O(eps^2)) so should match to high precision.
+    # Only difference is the perturbation path: generators vs Pose3.retract().
     J_scale = max(np.abs(J_num).max(), 1e-8)
-    np.testing.assert_allclose(J_ana / J_scale, J_num / J_scale, atol=0.05,
-                               err_msg="Analytical Jacobian deviates from numerical by >5%")
+    np.testing.assert_allclose(J_ana / J_scale, J_num / J_scale, atol=0.001,
+                               err_msg="Jacobian mismatch >0.1% between generator and retract paths")
 
 
 @requires_all

@@ -85,7 +85,7 @@ residual, jacobian = factor.evaluate(pose)
 graph.add(factor.as_gtsam_factor(pose_key, noise_model))
 ```
 
-**Jacobians:** Computed analytically via se(3) generators through the gsplat rasterizer. The viewmat is parameterized as `(I - hat(xi)) @ viewmat0`, correctly handling GTSAM's right-exponential update convention. Verified against numerical central differences (< 5% relative error).
+**Jacobians:** Computed via central differences through se(3) generators on GPU. The viewmat is parameterized as `(I - hat(xi)) @ viewmat0`, correctly handling GTSAM's right-exponential update convention. Verified against GTSAM's `Pose3.retract()`-based numerical derivative (< 0.1% relative error).
 
 ## Architecture
 
